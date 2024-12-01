@@ -1,6 +1,5 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.print.PageFormat;
 import java.awt.print.Printable;
 import java.awt.print.PrinterException;
 import java.awt.print.PrinterJob;
@@ -114,12 +113,6 @@ public class SeatSelectionDialog extends JDialog {
         } else {
             JOptionPane.showMessageDialog(this, "Invalid E-Wallet number. Must start with 09 and be 11 digits.");
         }
-    }
-
-    private boolean validateCreditCard(String cardNumber, String expiry, String cvv) {
-        return cardNumber.replaceAll("\\s", "").length() >= 13 &&
-                expiry.matches("^(0[1-9]|1[0-2])/\\d{2}$") &&
-                cvv.matches("\\d{3}");
     }
 
     private void processPayment() {
