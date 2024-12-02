@@ -1,83 +1,80 @@
-import java.io.*;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class FlightDataHandler {
-    private static final String FILE_NAME = "flights.txt";
-    private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    public static void saveFlightToDatabase(Flight flight) {
+        String insertSQL = """
+        INSERT INTO flights (flight_name, origin, destination, departure_time, arrival_time, price, cabin, total_seats, available_seats, booked_seats)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """;
 
-    public static List<Flight> readFlightsFromFile() {
-        List<Flight> flights = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                Flight flight = getFlight(line);
-                if (flight != null) {
-                    flights.add(flight);
-                }
-            }
-        } catch (IOException e) {
-            System.out.println("Error reading file: " + e.getMessage());
+        try (Connection conn = DBConnector.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
+            pstmt.setString(1, flight.getFlightName());
+            pstmt.setString(2, flight.getOrigin());
+            pstmt.setString(3, flight.getDestination());
+            pstmt.setTimestamp(4, Timestamp.valueOf(flight.getDepartureTime()));
+            pstmt.setTimestamp(5, Timestamp.valueOf(flight.getArrivalTime()));
+            pstmt.setDouble(6, flight.getPrice());
+            pstmt.setString(7, flight.getCabin());
+            pstmt.setInt(8, 60);
+            pstmt.setInt(9, flight.getAvailableSeats());
+            pstmt.setString(10, flight.getBookedSeatsAsString());
+            pstmt.executeUpdate();
+            System.out.println("Flight saved successfully.");
+        } catch (SQLException | ClassNotFoundException e) {
+            System.err.println("Error saving flight: " + e.getMessage());
         }
+    }
+
+    public static List<Flight> fetchAllFlights() {
+        List<Flight> flights = new ArrayList<>();
+        String querySQL = "SELECT * FROM flights";
+
+        try (Connection conn = DBConnector.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(querySQL)) {
+            while (rs.next()) {
+                int totalSeats = 60;
+                Flight flight = new Flight(
+                        rs.getString("flight_name"),
+                        rs.getString("origin"),
+                        rs.getString("destination"),
+                        rs.getTimestamp("departure_time").toLocalDateTime(),
+                        rs.getTimestamp("arrival_time").toLocalDateTime(),
+                        rs.getDouble("price"),
+                        rs.getString("cabin"),
+                        totalSeats
+                );
+
+                flight.setBookedSeatsFromString(rs.getString("booked_seats"));
+                flight.setAvailableSeats(totalSeats - flight.getBookedSeats().size());
+
+                flights.add(flight);
+            }
+        } catch (SQLException | ClassNotFoundException e) {
+            System.err.println("Error fetching flights: " + e.getMessage());
+        }
+
         return flights;
     }
-    private static Flight getFlight(String line) {
-        try {
-            String[] parts = line.split(",");
 
-            if (parts.length < 8) {
-                System.out.println("Incomplete flight data: " + line);
-                return null;
-            }
 
-            String availableSeatsStr = parts[7].split(";")[0].trim();
+    public static void updateSeatBooking(Flight flight) {
+        String updateSQL = "UPDATE flights SET available_seats = ?, booked_seats = ? WHERE flight_name = ?";
 
-            String flightName = parts[0];
-            String origin = parts[1];
-            String destination = parts[2];
-            LocalDateTime departure = LocalDateTime.parse(parts[3], formatter);
-            LocalDateTime arrival = LocalDateTime.parse(parts[4], formatter);
-            double price = Double.parseDouble(parts[5]);
-            String cabin = parts[6];
-            int availableSeats = Integer.parseInt(availableSeatsStr);
-
-            return new Flight(flightName, origin, destination, departure, arrival, price, cabin, availableSeats);
-        } catch (Exception e) {
-            System.out.println("Error parsing flight data: " + line + " - " + e.getMessage());
-            return null;
+        try (Connection conn = DBConnector.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(updateSQL)) {
+            int totalSeats = 60;
+            int availableSeats = totalSeats - flight.getBookedSeats().size();
+            pstmt.setInt(1, availableSeats);
+            pstmt.setString(2, flight.getBookedSeatsAsString());
+            pstmt.setString(3, flight.getFlightName());
+            pstmt.executeUpdate();
+            System.out.println("Flight seats updated successfully.");
+        } catch (SQLException | ClassNotFoundException e) {
+            System.err.println("Error updating seats: " + e.getMessage());
         }
-    }
-
-    public static void saveFlightsToFile(List<Flight> flights) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_NAME, false))) {
-            for (Flight flight : flights) {
-                writer.write(formatFlightForSaving(flight));
-                writer.newLine();
-            }
-        } catch (IOException e) {
-            System.out.println("Error writing to file: " + e.getMessage());
-        }
-    }
-
-    public static void appendFlightToFile(Flight flight) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_NAME, true))) {
-            writer.write(formatFlightForSaving(flight));
-            writer.newLine();
-        } catch (IOException e) {
-            System.out.println("Error appending to file: " + e.getMessage());
-        }
-    }
-
-    private static String formatFlightForSaving(Flight flight) {
-        return String.join(",",
-                flight.getFlightName(),
-                flight.getOrigin(),
-                flight.getDestination(),
-                flight.getDepartureTime().format(formatter),
-                flight.getArrivalTime().format(formatter),
-                String.valueOf(flight.getPrice()),
-                flight.getCabin(),
-                String.valueOf(flight.getAvailableSeats()));
     }
 }

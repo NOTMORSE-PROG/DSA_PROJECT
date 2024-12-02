@@ -26,8 +26,21 @@ public class Flight {
         this.bookedSeats = new ArrayList<>();
     }
 
-    public boolean isFullyBooked() {
-        return availableSeats == 0;
+    public void setBookedSeatsFromString(String seats) {
+        if (seats != null && !seats.isEmpty()) {
+            bookedSeats.clear();
+            for (String seat : seats.split(",")) {
+                bookedSeats.add(Integer.parseInt(seat.trim()));
+            }
+        }
+    }
+
+    public String getBookedSeatsAsString() {
+        return String.join(",", bookedSeats.stream().map(String::valueOf).toList());
+    }
+
+    public void setAvailableSeats(int availableSeats) {
+        this.availableSeats = availableSeats;
     }
 
     public List<Integer> getBookedSeats() {
@@ -36,12 +49,12 @@ public class Flight {
 
     public void bookSeats(List<Integer> seats) {
         if (seats.size() > availableSeats) {
-            return;
+            throw new IllegalArgumentException("Not enough available seats.");
         }
 
         for (int seat : seats) {
             if (bookedSeats.contains(seat)) {
-                return;
+                throw new IllegalArgumentException("Seat " + seat + " is already booked.");
             }
         }
 
@@ -81,9 +94,4 @@ public class Flight {
         return availableSeats;
     }
 
-    public void bookSeats(int numberOfSeats) {
-        if (numberOfSeats <= availableSeats) {
-            availableSeats -= numberOfSeats;
-        }
-    }
 }

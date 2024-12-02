@@ -1,15 +1,24 @@
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.print.Printable;
 import java.awt.print.PrinterException;
 import java.awt.print.PrinterJob;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.util.Date;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+import java.util.stream.Collectors;
 
-public class SeatSelectionDialog extends JDialog {
-    private Flight selectedFlight;
-    private List<JToggleButton> seatButtons;
-    private List<Integer> selectedSeats;
+public class SeatSelectionDialog extends JDialog implements ActionListener {
+    private final Flight selectedFlight;
+    private final List<Integer> selectedSeats;
 
     public SeatSelectionDialog(JFrame parent, Flight flight) {
         super(parent, "Select Seats", true);
@@ -20,20 +29,16 @@ public class SeatSelectionDialog extends JDialog {
 
     private void initializeUI() {
         setLayout(new BorderLayout());
-
         JPanel seatGridPanel = new JPanel(new GridLayout(10, 6, 5, 5));
-        seatButtons = new ArrayList<>();
 
         List<Integer> bookedSeats = selectedFlight.getBookedSeats();
         for (int i = 1; i <= 60; i++) {
             JToggleButton seatButton = getJToggleButton(i, bookedSeats);
-
-            seatButtons.add(seatButton);
             seatGridPanel.add(seatButton);
         }
 
-        JPanel buttonPanel = getJPanel();
 
+        JPanel buttonPanel = getJPanel();
         add(new JLabel("Select Your Seats"), BorderLayout.NORTH);
         add(seatGridPanel, BorderLayout.CENTER);
         add(buttonPanel, BorderLayout.SOUTH);
@@ -52,7 +57,7 @@ public class SeatSelectionDialog extends JDialog {
             seatButton.setEnabled(false);
         } else {
             seatButton.setBackground(Color.GREEN);
-            seatButton.addActionListener(e -> {
+            seatButton.addActionListener(_ -> {
                 if (seatButton.isSelected()) {
                     selectedSeats.add(Integer.parseInt(seatButton.getText()));
                 } else {
@@ -68,22 +73,13 @@ public class SeatSelectionDialog extends JDialog {
         JButton proceedButton = new JButton("Proceed to Payment");
         JButton cancelButton = new JButton("Cancel");
 
-        proceedButton.addActionListener(e -> {
-            if (selectedSeats.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Please select at least one seat.");
-                return;
-            }
-            selectedFlight.bookSeats(selectedSeats);
-            openPaymentDialog();
-        });
-
-        cancelButton.addActionListener(e -> dispose());
+        proceedButton.addActionListener(this);
+        cancelButton.addActionListener(this);
 
         buttonPanel.add(proceedButton);
         buttonPanel.add(cancelButton);
         return buttonPanel;
     }
-
 
     private void openPaymentDialog() {
         String[] paymentMethods = {"Credit Card", "E-Wallet"};
@@ -106,28 +102,68 @@ public class SeatSelectionDialog extends JDialog {
     }
 
     private void openEWalletPayment() {
-        String ewalletNumber = JOptionPane.showInputDialog(this, "Enter 11-digit E-Wallet Number (starting with 09):");
+        while (true) {
+            String ewalletNumber = JOptionPane.showInputDialog(this, "Enter 11-digit E-Wallet Number (starting with 09):");
 
-        if (ewalletNumber != null && ewalletNumber.matches("^09\\d{9}$")) {
-            processPayment();
-        } else {
-            JOptionPane.showMessageDialog(this, "Invalid E-Wallet number. Must start with 09 and be 11 digits.");
+            if (ewalletNumber == null) {
+                JOptionPane.showMessageDialog(this, "Payment canceled.");
+                return;
+            }
+
+            if (!ewalletNumber.matches("\\d+")) {
+                JOptionPane.showMessageDialog(this, "E-Wallet number must contain only numbers.");
+                continue;
+            }
+
+            if (ewalletNumber.matches("^09\\d{9}$")) {
+                processPayment();
+                break;
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid E-Wallet number. Must start with 09 and be 11 digits.");
+            }
         }
     }
 
     private void processPayment() {
+        int randomId = 100000 + new Random().nextInt(900000);
         double totalPrice = selectedFlight.getPrice() * selectedSeats.size();
-
         StringBuilder receipt = new StringBuilder();
         receipt.append("Flight Booking Receipt\n\n");
+        receipt.append("Booking ID: ").append(randomId).append("\n");
         receipt.append("Flight: ").append(selectedFlight.getFlightName()).append("\n");
         receipt.append("From: ").append(selectedFlight.getOrigin()).append("\n");
         receipt.append("To: ").append(selectedFlight.getDestination()).append("\n");
-        receipt.append("Departure: ").append(selectedFlight.getDepartureTime()).append("\n");
-        receipt.append("Seats Selected: ").append(selectedSeats).append("\n");
+
+        LocalDateTime departureLocalDateTime = selectedFlight.getDepartureTime();
+        Date departureTime = Date.from(departureLocalDateTime.atZone(ZoneId.systemDefault()).toInstant());
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy hh:mm a");
+        String formattedDepartureTime = dateFormat.format(departureTime);
+
+        receipt.append("Departure: ").append(formattedDepartureTime).append("\n");
+
+        String seatsString = selectedSeats.stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        receipt.append("Seats Selected: ").append(seatsString).append("\n");
         receipt.append("Total Price: ₱").append(String.format("%.2f", totalPrice)).append("\n");
 
-        selectedFlight.bookSeats(selectedSeats.size());
+        selectedFlight.bookSeats(selectedSeats);
+
+        try (Connection connection = DBConnector.getConnection()) {
+            String query = "INSERT INTO tickets (booking_id, flight, origin, destination, departure, seats_selected, price) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement statement = connection.prepareStatement(query);
+            statement.setInt(1, randomId);
+            statement.setString(2, selectedFlight.getFlightName());
+            statement.setString(3, selectedFlight.getOrigin());
+            statement.setString(4, selectedFlight.getDestination());
+            statement.setTimestamp(5, new java.sql.Timestamp(departureTime.getTime()));
+            statement.setString(6, seatsString);
+            statement.setDouble(7, totalPrice);
+            statement.executeUpdate();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
 
         JTextArea receiptArea = new JTextArea(receipt.toString());
         receiptArea.setEditable(false);
@@ -151,6 +187,8 @@ public class SeatSelectionDialog extends JDialog {
         }
         dispose();
     }
+
+
 
     private void printReceipt(String receiptContent) {
         try {
@@ -201,10 +239,107 @@ public class SeatSelectionDialog extends JDialog {
         return printerJob;
     }
 
+    private void openCreditCardPayment() {
+        while (true) {
+            JPanel panel = new JPanel(new GridLayout(4, 2));
+            JTextField cardNumberField = new JTextField();
+            JTextField expiryField = new JTextField();
+            JTextField cvvField = new JTextField();
+            JTextField nameField = new JTextField();
+
+            panel.add(new JLabel("Card Number: *"));
+            panel.add(cardNumberField);
+            panel.add(new JLabel("Expiry Date (MM/YY): *"));
+            panel.add(expiryField);
+            panel.add(new JLabel("CVV: *"));
+            panel.add(cvvField);
+            panel.add(new JLabel("Cardholder Name: *"));
+            panel.add(nameField);
+
+            int result = JOptionPane.showConfirmDialog(
+                    this, panel, "Credit Card Payment",
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
+            );
+
+            if (result == JOptionPane.CANCEL_OPTION || result == JOptionPane.CLOSED_OPTION) {
+                return;
+            }
+
+            if (result == JOptionPane.OK_OPTION) {
+                if (cardNumberField.getText().trim().isEmpty() ||
+                        expiryField.getText().trim().isEmpty() ||
+                        cvvField.getText().trim().isEmpty() ||
+                        nameField.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "All fields must be filled.");
+                    continue;
+                }
+
+                if (isNumeric(cardNumberField.getText())) {
+                    JOptionPane.showMessageDialog(this, "Card Number must contain only numbers.");
+                    continue;
+                }
+
+                if (isNumeric(expiryField.getText())) {
+                    JOptionPane.showMessageDialog(this, "Expiry Date must contain only numbers.");
+                    continue;
+                }
+
+                if (isNumeric(cvvField.getText())) {
+                    JOptionPane.showMessageDialog(this, "CVV must contain only numbers.");
+                    continue;
+                }
+
+                if (!isValidName(nameField.getText())) {
+                    JOptionPane.showMessageDialog(this, "Cardholder Name must contain only letters and spaces.");
+                    continue;
+                }
+
+                String formattedCardNumber = formatCreditCardNumber(cardNumberField.getText());
+                String expiryDate = expiryField.getText();
+
+                if (!isExpiryDateValid(expiryDate)) {
+                    JOptionPane.showMessageDialog(this, "Credit card has expired or is invalid (expires December 2024 or earlier).");
+                    continue;
+                }
+
+                if (validateCreditCardDetails(formattedCardNumber, expiryDate, cvvField.getText())) {
+                    processPayment();
+                    break;
+                } else {
+                    int choice = JOptionPane.showConfirmDialog(
+                            this,
+                            "Invalid card details. Would you like to try again?",
+                            "Payment Error",
+                            JOptionPane.YES_NO_OPTION
+                    );
+
+                    if (choice == JOptionPane.NO_OPTION) {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isNumeric(String str) {
+        if (str == null || str.isEmpty()) {
+            return true;
+        }
+        return !str.matches("\\d+");
+    }
+
+    private boolean isValidName(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        return str.matches("^[a-zA-Z ]+$");
+    }
+
+
     private boolean validateCreditCardDetails(String cardNumber, String expiry, String cvv) {
         String cleanCardNumber = cardNumber.replaceAll("\\D", "");
 
-        boolean isValidNumber = validateLuhnAlgorithm(cleanCardNumber);
+        boolean isValidNumber = isValidCreditCardNumber(cleanCardNumber);
 
         boolean isValidExpiry = expiry.matches("^(0[1-9]|1[0-2])/\\d{2}$");
 
@@ -213,38 +348,24 @@ public class SeatSelectionDialog extends JDialog {
         return isValidNumber && isValidExpiry && isValidCVV;
     }
 
-    private void openCreditCardPayment() {
-        JPanel panel = new JPanel(new GridLayout(4, 2));
-        JTextField cardNumberField = new JTextField();
-        JTextField expiryField = new JTextField();
-        JTextField cvvField = new JTextField();
-        JTextField nameField = new JTextField();
+    private boolean isExpiryDateValid(String expiryDate) {
+        try {
+            java.time.LocalDate currentDate = java.time.LocalDate.now();
+            int month = Integer.parseInt(expiryDate.substring(0, 2));
+            int year = Integer.parseInt("20" + expiryDate.substring(3, 5));
 
-        panel.add(new JLabel("Card Number:"));
-        panel.add(cardNumberField);
-        panel.add(new JLabel("Expiry Date (MM/YY):"));
-        panel.add(expiryField);
-        panel.add(new JLabel("CVV:"));
-        panel.add(cvvField);
-        panel.add(new JLabel("Cardholder Name:"));
-        panel.add(nameField);
+            java.time.LocalDate expiry = java.time.LocalDate.of(year, month, 1);
 
-        int result = JOptionPane.showConfirmDialog(
-                this, panel, "Credit Card Payment",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
-        );
-
-        if (result == JOptionPane.OK_OPTION) {
-            String formattedCardNumber = formatCreditCardNumber(cardNumberField.getText());
-            if (validateCreditCardDetails(formattedCardNumber, expiryField.getText(), cvvField.getText())) {
-                processPayment();
-            } else {
-                JOptionPane.showMessageDialog(this, "Invalid card details. Please try again.");
+            if (expiry.isBefore(currentDate)) {
+                return false;
             }
+        } catch (Exception e) {
+            return false;
         }
+        return true;
     }
 
-    private boolean validateLuhnAlgorithm(String cardNumber) {
+    private boolean isValidCreditCardNumber(String cardNumber) {
         int sum = 0;
         boolean alternate = false;
 
@@ -266,16 +387,21 @@ public class SeatSelectionDialog extends JDialog {
     }
 
     private String formatCreditCardNumber(String cardNumber) {
-        String digitsOnly = cardNumber.replaceAll("\\D", "");
+        return cardNumber.replaceAll("[^0-9]", "");
+    }
 
-        StringBuilder formatted = new StringBuilder();
-        for (int i = 0; i < digitsOnly.length(); i++) {
-            if (i > 0 && i % 4 == 0) {
-                formatted.append(" ");
+    public void actionPerformed(ActionEvent e) {
+        Object source = e.getSource();
+        if (source instanceof JButton button) {
+            if (button.getText().equals("Proceed to Payment")) {
+                if (selectedSeats.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please select at least one seat.");
+                    return;
+                }
+                openPaymentDialog();
+            } else if (button.getText().equals("Cancel")) {
+                dispose();
             }
-            formatted.append(digitsOnly.charAt(i));
         }
-
-        return formatted.toString();
     }
 }

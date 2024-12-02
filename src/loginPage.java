@@ -124,7 +124,7 @@ public class loginPage extends JFrame implements ActionListener {
                 JOptionPane.showMessageDialog(this, "An error occurred. Please try again.");
             }
         } else if (e.getSource() == goBackButton) {
-            new registerPage();
+            new indexFrame();
             this.dispose();
         }
     }

@@ -1,8 +1,13 @@
 import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
@@ -22,7 +27,7 @@ public class bookFlight extends JFrame implements ActionListener {
 
     public bookFlight(String userEmail) {
         this.userEmail = userEmail;
-        setTitle("Flight Booking System");
+        setTitle("SKY RESERVE");
         getContentPane().setBackground(Color.decode("#0F149a"));
         initializeFlights();
         createUI();
@@ -30,12 +35,15 @@ public class bookFlight extends JFrame implements ActionListener {
     }
 
     private void initializeFlights() {
-        flights = FlightDataHandler.readFlightsFromFile();
+        flights = FlightDataHandler.fetchAllFlights();
         if (flights.isEmpty()) {
             flights = generateRandomFlights();
-            FlightDataHandler.saveFlightsToFile(flights);
+            for (Flight flight : flights) {
+                FlightDataHandler.saveFlightToDatabase(flight);
+            }
         }
     }
+
 
     private List<Flight> generateRandomFlights() {
         List<Flight> generatedFlights = new ArrayList<>();
@@ -99,9 +107,27 @@ public class bookFlight extends JFrame implements ActionListener {
         addFilter("Cabin:", cabinFilterCombo, searchFilterPanel, gbc, 3);
         addFilter("Time:", hourFilterCombo, searchFilterPanel, gbc, 4);
 
-        String[] columnNames = {"Flight", "From", "To", "Departure", "Arrival", "Price", "Cabin", "Seats"};
+        String[] columnNames = {"Flight", "From", "To", "Departure", "Arrival", "Price", "Cabin", "Available Seats"};
+        tableModel = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
         tableModel = new DefaultTableModel(columnNames, 0);
         flightTable = new JTable(tableModel);
+
+        int topBottomPadding = 20;
+        int leftRightPadding = 15;
+        PaddingTableCellRenderer renderer = new PaddingTableCellRenderer(topBottomPadding, leftRightPadding);
+        for (int i = 0; i < flightTable.getColumnCount(); i++) {
+            flightTable.getColumnModel().getColumn(i).setCellRenderer(renderer);
+        }
+
+        Font tableFont = new Font("Arial", Font.PLAIN, 16);
+        flightTable.setFont(tableFont);
+        flightTable.getTableHeader().setFont(new Font("Arial", Font.BOLD, 18));
 
         populateTable(flights);
 
@@ -132,6 +158,22 @@ public class bookFlight extends JFrame implements ActionListener {
         pack();
         setLocationRelativeTo(null);
         setExtendedState(JFrame.MAXIMIZED_BOTH);
+    }
+
+    public static class PaddingTableCellRenderer extends DefaultTableCellRenderer {
+        private final int topBottomPadding;
+        private final int leftRightPadding;
+
+        public PaddingTableCellRenderer(int topBottomPadding, int leftRightPadding) {
+            this.topBottomPadding = topBottomPadding;
+            this.leftRightPadding = leftRightPadding;
+        }
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            label.setBorder(BorderFactory.createEmptyBorder(topBottomPadding, leftRightPadding, topBottomPadding, leftRightPadding)); // Adding padding
+            return label;
+        }
     }
 
     private void addFilter(String labelText, JComboBox<String> comboBox, JPanel panel, GridBagConstraints gbc, int gridy) {
@@ -177,6 +219,11 @@ public class bookFlight extends JFrame implements ActionListener {
         }
     }
 
+    private void refreshTableData() {
+        flights = FlightDataHandler.fetchAllFlights();
+        populateTable(flights);
+    }
+
     private void openSeatSelection() {
         int selectedRow = flightTable.getSelectedRow();
         if (selectedRow == -1) {
@@ -186,18 +233,24 @@ public class bookFlight extends JFrame implements ActionListener {
 
         Flight selectedFlight = flights.get(selectedRow);
         new SeatSelectionDialog(this, selectedFlight);
+        FlightDataHandler.updateSeatBooking(selectedFlight);
+        refreshTableData();
 
         if (selectedFlight.getAvailableSeats() == 0) {
-            flights.remove(selectedRow);
-            FlightDataHandler.saveFlightsToFile(flights);
-            Flight newFlight = generateRandomFlight();
-            flights.add(newFlight);
-            FlightDataHandler.appendFlightToFile(newFlight);
-            populateTable(flights);
+            try (Connection conn = DBConnector.getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement("DELETE FROM flights WHERE flight_name = ?")) {
+                pstmt.setString(1, selectedFlight.getFlightName());
+                pstmt.executeUpdate();
+            } catch (SQLException | ClassNotFoundException e) {
+                System.err.println("Error deleting fully booked flight: " + e.getMessage());
+            }
+            generateAndSaveRandomFlight();
+            refreshTableData();
         }
     }
 
-    private Flight generateRandomFlight() {
+
+    public static void generateAndSaveRandomFlight() {
         Random random = new Random();
 
         String[] flightNames = {"Philippine Airlines", "Cebu Pacific", "AirAsia", "PAL Express"};
@@ -222,7 +275,30 @@ public class bookFlight extends JFrame implements ActionListener {
         String cabin = cabinTypes[random.nextInt(cabinTypes.length)];
         int totalSeats = 60;
 
-        return new Flight(flightName, origin, destination, departureTime, arrivalTime, price, cabin, totalSeats);
+        String insertSQL = """
+        INSERT INTO flights (flight_name, origin, destination, departure_time, arrival_time,\s
+                             price, cabin, total_seats, available_seats, booked_seats)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+   \s""";
+
+        try (Connection conn = DBConnector.getConnection() ;
+             PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
+            pstmt.setString(1, flightName);
+            pstmt.setString(2, origin);
+            pstmt.setString(3, destination);
+            pstmt.setTimestamp(4, Timestamp.valueOf(departureTime));
+            pstmt.setTimestamp(5, Timestamp.valueOf(arrivalTime));
+            pstmt.setDouble(6, price);
+            pstmt.setString(7, cabin);
+            pstmt.setInt(8, totalSeats);
+            pstmt.setInt(9, totalSeats);
+            pstmt.setString(10, "");
+
+            pstmt.executeUpdate();
+            System.out.println("Random flight generated and saved successfully.");
+        } catch (SQLException | ClassNotFoundException e) {
+            System.err.println("Error generating and saving random flight: " + e.getMessage());
+        }
     }
 
     private void applyFilters() {
@@ -302,15 +378,12 @@ public class bookFlight extends JFrame implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-
         if (e.getSource() == applyFilterButton) {
             applyFilters();
         }
-
         if (e.getSource() == bookButton) {
             openSeatSelection();
         }
-
         if (e.getSource() == goBackButton) {
             this.dispose();
             new userDashboard(userEmail);
