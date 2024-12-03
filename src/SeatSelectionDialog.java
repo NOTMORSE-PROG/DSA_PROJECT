@@ -294,11 +294,6 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
                     continue;
                 }
 
-                if (isNumeric(expiryField.getText())) {
-                    JOptionPane.showMessageDialog(this, "Expiry Date must contain only numbers.");
-                    continue;
-                }
-
                 if (isNumeric(cvvField.getText())) {
                     JOptionPane.showMessageDialog(this, "CVV must contain only numbers.");
                     continue;
