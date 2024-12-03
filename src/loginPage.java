@@ -105,18 +105,22 @@ public class loginPage extends JFrame implements ActionListener {
 
             try {
                 Connection conn = DBConnector.getConnection();
-                String sql = "SELECT * FROM users WHERE email = ? AND password = ?";
+                String sql = "SELECT * FROM users WHERE email = ?";
                 PreparedStatement pstmt = conn.prepareStatement(sql);
                 pstmt.setString(1, email);
-                pstmt.setString(2, password);
                 ResultSet rs = pstmt.executeQuery();
 
                 if (rs.next()) {
-                    JOptionPane.showMessageDialog(this, "Login successful!");
-                     new userDashboard(email);
-                    dispose();
+                    String storedPassword = rs.getString("password");
+                    if (storedPassword.equals(password)) {
+                        JOptionPane.showMessageDialog(this, "Login successful!");
+                        new userDashboard(email);
+                        dispose();
+                    } else {
+                        JOptionPane.showMessageDialog(this, "Wrong password. Please try again.");
+                    }
                 } else {
-                    JOptionPane.showMessageDialog(this, "Invalid email or password. Please try again.");
+                    JOptionPane.showMessageDialog(this, "User not found. Please check your email.");
                 }
                 conn.close();
             } catch (Exception ex) {
