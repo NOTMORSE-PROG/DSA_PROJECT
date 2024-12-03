@@ -193,27 +193,27 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
 
         int confirmAction = JOptionPane.showConfirmDialog(
                 this,
-                "Would you like to print the receipt?",
+                "Would you like to print the Ticket?",
                 "Booking Complete",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.QUESTION_MESSAGE
         );
 
         if (confirmAction == JOptionPane.YES_OPTION) {
-            printReceipt(receipt.toString());
+            printTicket(receipt.toString());
         }
         dispose();
     }
 
-    private void printReceipt(String receiptContent) {
+    private void printTicket(String ticketContent) {
         try {
-            PrinterJob printerJob = getPrinterJob(receiptContent);
+            PrinterJob printerJob = getPrinterJob(ticketContent);
 
             if (printerJob.printDialog()) {
                 printerJob.print();
                 JOptionPane.showMessageDialog(
                         this,
-                        "Receipt printed successfully!",
+                        "Ticket printed successfully!",
                         "Print Confirmation",
                         JOptionPane.INFORMATION_MESSAGE
                 );
@@ -221,7 +221,7 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
         } catch (PrinterException e) {
             JOptionPane.showMessageDialog(
                     this,
-                    "Error printing receipt: " + e.getMessage(),
+                    "Error printing Ticket: " + e.getMessage(),
                     "Print Error",
                     JOptionPane.ERROR_MESSAGE
             );
