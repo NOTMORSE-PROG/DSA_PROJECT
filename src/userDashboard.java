@@ -93,7 +93,8 @@ public class userDashboard extends JFrame implements ActionListener {
         } else if (e.getSource() == checkTicketsButton) {
             JOptionPane.showMessageDialog(this, "Navigating to 'Check Tickets'...");
         } else if (e.getSource() == profileSettingsButton) {
-            JOptionPane.showMessageDialog(this, "Navigating to 'Profile Settings'...");
+            this.dispose();
+            new Setting(userEmail);
         } else if (e.getSource() == logoutButton) {
             JOptionPane.showMessageDialog(this, "Logging out...");
             this.dispose();

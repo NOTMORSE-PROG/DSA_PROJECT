@@ -22,7 +22,6 @@ public class bookFlight extends JFrame implements ActionListener {
     private JButton applyFilterButton;
     private JButton bookButton;
     private JButton goBackButton;
-
     private final String userEmail;
 
     public bookFlight(String userEmail) {
@@ -125,7 +124,7 @@ public class bookFlight extends JFrame implements ActionListener {
             flightTable.getColumnModel().getColumn(i).setCellRenderer(renderer);
         }
 
-        Font tableFont = new Font("Arial", Font.PLAIN, 16);
+        Font tableFont = new Font("Arial", Font.PLAIN, 12);
         flightTable.setFont(tableFont);
         flightTable.getTableHeader().setFont(new Font("Arial", Font.BOLD, 18));
 
