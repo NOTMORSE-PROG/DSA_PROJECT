@@ -181,8 +181,8 @@ public class Setting extends JFrame implements ActionListener {
                     }
 
                     JOptionPane.showMessageDialog(this, "Account deleted successfully.");
-                    System.exit(0);
-
+                    this.dispose();
+                    new indexFrame();
                 } catch (SQLException | ClassNotFoundException ex) {
                     ex.printStackTrace();
                     JOptionPane.showMessageDialog(this, "Unable to delete account: " + ex.getMessage());
