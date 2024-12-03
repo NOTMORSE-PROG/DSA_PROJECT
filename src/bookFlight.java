@@ -49,8 +49,12 @@ public class bookFlight extends JFrame implements ActionListener {
         List<Flight> generatedFlights = new ArrayList<>();
         String[] cities = {"Manila", "Cebu", "Davao", "Palawan", "Boracay", "Iloilo", "Clark", "Siargao"};
         String[] airlines = {"Philippine Airlines", "Cebu Pacific", "AirAsia", "PAL Express"};
-
         Random rand = new Random();
+
+        LocalDate today = LocalDate.of(2024, 12, 4);
+        LocalDate nextWeekStart = today.plusWeeks(1);
+        LocalDate nextMonthStart = LocalDate.of(2025, 1, 1);
+
         for (int i = 0; i < 50; i++) {
             String origin = cities[rand.nextInt(cities.length)];
             String destination;
@@ -58,8 +62,16 @@ public class bookFlight extends JFrame implements ActionListener {
                 destination = cities[rand.nextInt(cities.length)];
             } while (destination.equals(origin));
 
-            LocalDateTime departureTime = LocalDateTime.now().plusDays(rand.nextInt(30)).plusHours(rand.nextInt(24));
-            LocalDateTime arrivalTime = departureTime.plusDays(1).plusHours(rand.nextInt(3) + 1);
+            LocalDateTime departureTime;
+            if (i < 15) {
+                departureTime = today.atStartOfDay().plusHours(rand.nextInt(24));
+            } else if (i < 35) {
+                departureTime = nextWeekStart.atStartOfDay().plusDays(rand.nextInt(7)).plusHours(rand.nextInt(24));
+            } else {
+                departureTime = nextMonthStart.atStartOfDay().plusDays(rand.nextInt(31)).plusHours(rand.nextInt(24));
+            }
+
+            LocalDateTime arrivalTime = departureTime.plusHours(rand.nextInt(6) + 10);
 
             Flight flight = new Flight(
                     airlines[rand.nextInt(airlines.length)] + " " + rand.nextInt(1000),
@@ -75,6 +87,7 @@ public class bookFlight extends JFrame implements ActionListener {
         }
         return generatedFlights;
     }
+
 
     private void createUI() {
         setLayout(new BorderLayout());
@@ -92,7 +105,7 @@ public class bookFlight extends JFrame implements ActionListener {
         gbc.gridx = 1;
         searchFilterPanel.add(searchField, gbc);
 
-        String[] dates = {"Any Date", "Next Week", "Next Month"};
+        String[] dates = {"Any Date","Today","Next Week", "Next Month"};
         String[] prices = {"Any Price", "Low to High", "High to Low"};
         String[] cabins = {"Any Cabin", "Economy", "Business"};
         String[] hours = {"Any Time", "Morning", "Afternoon", "Evening"};
@@ -264,12 +277,23 @@ public class bookFlight extends JFrame implements ActionListener {
             destination = locations[random.nextInt(locations.length)];
         } while (destination.equals(origin));
 
-        LocalDateTime departureTime = LocalDateTime.now()
-                .plusDays(random.nextInt(30))
-                .plusHours(random.nextInt(24))
-                .plusMinutes(random.nextInt(60));
+        LocalDateTime departureTime;
+        int category = random.nextInt(3);
 
-        LocalDateTime arrivalTime = departureTime.plusHours(random.nextInt(5) + 1);
+        if (category == 0) { // Today
+            departureTime = LocalDateTime.now()
+                    .withHour(random.nextInt(24))
+                    .withMinute(random.nextInt(60));
+        } else if (category == 1) { // Next week
+            departureTime = LocalDateTime.now()
+                    .plusDays(7 + random.nextInt(7))
+                    .withHour(random.nextInt(24))
+                    .withMinute(random.nextInt(60));
+        } else {
+            departureTime = LocalDateTime.of(2025, 1, random.nextInt(31) + 1, random.nextInt(24), random.nextInt(60));
+        }
+
+        LocalDateTime arrivalTime = departureTime.plusHours(random.nextInt(6) + 10);
 
         double price = 1000 + random.nextDouble() * 10000;
         String cabin = cabinTypes[random.nextInt(cabinTypes.length)];
@@ -279,9 +303,9 @@ public class bookFlight extends JFrame implements ActionListener {
         INSERT INTO flights (flight_name, origin, destination, departure_time, arrival_time,\s
                              price, cabin, total_seats, available_seats, booked_seats)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-   \s""";
+    """;
 
-        try (Connection conn = DBConnector.getConnection() ;
+        try (Connection conn = DBConnector.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
             pstmt.setString(1, flightName);
             pstmt.setString(2, origin);
@@ -313,10 +337,16 @@ public class bookFlight extends JFrame implements ActionListener {
             LocalDateTime now = LocalDateTime.now();
             filteredFlights.removeIf(flight -> {
                 LocalDateTime departure = flight.getDepartureTime();
-                if ("Next Week".equals(selectedDate)) {
-                    return !departure.isAfter(now) || !departure.isBefore(now.plusWeeks(1));
+                if ("Today".equals(selectedDate)) {
+                    return !departure.toLocalDate().isEqual(now.toLocalDate());
+                } else if ("Next Week".equals(selectedDate)) {
+                    LocalDate nextWeekStart = now.toLocalDate().plusWeeks(1);
+                    LocalDate nextWeekEnd = nextWeekStart.plusDays(6);
+                    return departure.toLocalDate().isBefore(nextWeekStart) || departure.toLocalDate().isAfter(nextWeekEnd);
                 } else if ("Next Month".equals(selectedDate)) {
-                    return !departure.isAfter(now) || !departure.isBefore(now.plusMonths(1));
+                    LocalDate nextMonthStart = now.toLocalDate().withDayOfMonth(1).plusMonths(1);
+                    LocalDate nextMonthEnd = nextMonthStart.withDayOfMonth(nextMonthStart.lengthOfMonth());
+                    return departure.toLocalDate().isBefore(nextMonthStart) || departure.toLocalDate().isAfter(nextMonthEnd);
                 }
                 return false;
             });
