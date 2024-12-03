@@ -23,3 +23,16 @@ CREATE TABLE flights (
     available_seats INT NOT NULL,
     booked_seats TEXT
 );
+
+CREATE TABLE tickets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_fullname VARCHAR(255) NOT NULL,
+    booking_id INT NOT NULL,
+    flight VARCHAR(100) NOT NULL,
+    origin VARCHAR(100) NOT NULL,
+    destination VARCHAR(100) NOT NULL,
+    departure DATETIME NOT NULL,
+    seats_selected TEXT NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
