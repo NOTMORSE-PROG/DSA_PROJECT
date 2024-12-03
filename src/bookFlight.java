@@ -26,6 +26,7 @@ public class bookFlight extends JFrame implements ActionListener {
 
     public bookFlight(String userEmail) {
         this.userEmail = userEmail;
+        this.setResizable(false);
         setTitle("SKY RESERVE");
         getContentPane().setBackground(Color.decode("#0F149a"));
         initializeFlights();
@@ -231,7 +232,7 @@ public class bookFlight extends JFrame implements ActionListener {
         }
 
         Flight selectedFlight = flights.get(selectedRow);
-        new SeatSelectionDialog(this, selectedFlight);
+        new SeatSelectionDialog(this, selectedFlight, userEmail);
         FlightDataHandler.updateSeatBooking(selectedFlight);
         refreshTableData();
 
@@ -243,13 +244,13 @@ public class bookFlight extends JFrame implements ActionListener {
             } catch (SQLException | ClassNotFoundException e) {
                 System.err.println("Error deleting fully booked flight: " + e.getMessage());
             }
-            generateAndSaveRandomFlight();
+            generateNewFlights();
             refreshTableData();
         }
     }
 
 
-    public static void generateAndSaveRandomFlight() {
+    public static void generateNewFlights() {
         Random random = new Random();
 
         String[] flightNames = {"Philippine Airlines", "Cebu Pacific", "AirAsia", "PAL Express"};

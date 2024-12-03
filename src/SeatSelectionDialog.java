@@ -7,6 +7,7 @@ import java.awt.print.PrinterException;
 import java.awt.print.PrinterJob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Date;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -19,11 +20,13 @@ import java.util.stream.Collectors;
 public class SeatSelectionDialog extends JDialog implements ActionListener {
     private final Flight selectedFlight;
     private final List<Integer> selectedSeats;
+    private final String userEmail;
 
-    public SeatSelectionDialog(JFrame parent, Flight flight) {
+    public SeatSelectionDialog(JFrame parent, Flight flight, String userEmail) {
         super(parent, "Select Seats", true);
         this.selectedFlight = flight;
         this.selectedSeats = new ArrayList<>();
+        this.userEmail = userEmail;
         initializeUI();
     }
 
@@ -116,7 +119,7 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
             }
 
             if (ewalletNumber.matches("^09\\d{9}$")) {
-                processPayment();
+                processPayment(getUserEmail());
                 break;
             } else {
                 JOptionPane.showMessageDialog(this, "Invalid E-Wallet number. Must start with 09 and be 11 digits.");
@@ -124,7 +127,7 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
         }
     }
 
-    private void processPayment() {
+    private void processPayment(String userEmail) {
         int randomId = 100000 + new Random().nextInt(900000);
         double totalPrice = selectedFlight.getPrice() * selectedSeats.size();
         StringBuilder receipt = new StringBuilder();
@@ -150,16 +153,30 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
 
         selectedFlight.bookSeats(selectedSeats);
 
+        String userFullName = "";
         try (Connection connection = DBConnector.getConnection()) {
-            String query = "INSERT INTO tickets (booking_id, flight, origin, destination, departure, seats_selected, price) VALUES (?, ?, ?, ?, ?, ?, ?)";
-            PreparedStatement statement = connection.prepareStatement(query);
-            statement.setInt(1, randomId);
-            statement.setString(2, selectedFlight.getFlightName());
-            statement.setString(3, selectedFlight.getOrigin());
-            statement.setString(4, selectedFlight.getDestination());
-            statement.setTimestamp(5, new java.sql.Timestamp(departureTime.getTime()));
-            statement.setString(6, seatsString);
-            statement.setDouble(7, totalPrice);
+            String getUserFullNameQuery = "SELECT CONCAT(first_name, ' ', last_name) AS full_name FROM users WHERE email = ?";
+            PreparedStatement userStatement = connection.prepareStatement(getUserFullNameQuery);
+            userStatement.setString(1, userEmail);
+            ResultSet resultSet = userStatement.executeQuery();
+            if (resultSet.next()) {
+                userFullName = resultSet.getString("full_name");
+            }
+
+            String sql = """
+            INSERT INTO tickets (user_id, user_fullname, booking_id, flight, origin, destination, departure, seats_selected, price)
+            VALUES ((SELECT id FROM users WHERE email = ?), ?, ?, ?, ?, ?, ?, ?, ?);
+        """;
+            PreparedStatement statement = connection.prepareStatement(sql);
+            statement.setString(1, userEmail);
+            statement.setString(2, userFullName);
+            statement.setInt(3, randomId);
+            statement.setString(4, selectedFlight.getFlightName());
+            statement.setString(5, selectedFlight.getOrigin());
+            statement.setString(6, selectedFlight.getDestination());
+            statement.setTimestamp(7, new java.sql.Timestamp(departureTime.getTime()));
+            statement.setString(8, seatsString);
+            statement.setDouble(9, totalPrice);
             statement.executeUpdate();
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -176,7 +193,7 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
 
         int confirmAction = JOptionPane.showConfirmDialog(
                 this,
-                "Would you like to print the receipt or save it?",
+                "Would you like to print the receipt?",
                 "Booking Complete",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.QUESTION_MESSAGE
@@ -187,8 +204,6 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
         }
         dispose();
     }
-
-
 
     private void printReceipt(String receiptContent) {
         try {
@@ -303,7 +318,7 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
                 }
 
                 if (validateCreditCardDetails(formattedCardNumber, expiryDate, cvvField.getText())) {
-                    processPayment();
+                    processPayment(getUserEmail());
                     break;
                 } else {
                     int choice = JOptionPane.showConfirmDialog(
@@ -403,5 +418,9 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
                 dispose();
             }
         }
+    }
+
+    public String getUserEmail() {
+        return userEmail;
     }
 }

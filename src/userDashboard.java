@@ -91,7 +91,8 @@ public class userDashboard extends JFrame implements ActionListener {
             this.dispose();
             new bookFlight(userEmail);
         } else if (e.getSource() == checkTicketsButton) {
-            JOptionPane.showMessageDialog(this, "Navigating to 'Check Tickets'...");
+            this.dispose();
+            new checkTickets(userEmail);
         } else if (e.getSource() == profileSettingsButton) {
             this.dispose();
             new Setting(userEmail);
