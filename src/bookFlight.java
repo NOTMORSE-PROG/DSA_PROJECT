@@ -280,11 +280,11 @@ public class bookFlight extends JFrame implements ActionListener {
         LocalDateTime departureTime;
         int category = random.nextInt(3);
 
-        if (category == 0) { // Today
+        if (category == 0) {
             departureTime = LocalDateTime.now()
                     .withHour(random.nextInt(24))
                     .withMinute(random.nextInt(60));
-        } else if (category == 1) { // Next week
+        } else if (category == 1) {
             departureTime = LocalDateTime.now()
                     .plusDays(7 + random.nextInt(7))
                     .withHour(random.nextInt(24))
