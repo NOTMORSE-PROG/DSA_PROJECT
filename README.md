@@ -37,3 +37,13 @@ CREATE TABLE tickets (
     price DECIMAL(10, 2),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE transaction_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    transaction_type ENUM('BOOKED', 'CANCELLED') NOT NULL,
+    flight_name VARCHAR(255),
+    seats_selected VARCHAR(255),
+    transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
