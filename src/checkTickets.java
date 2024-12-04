@@ -178,7 +178,7 @@ public class checkTickets extends JFrame implements ActionListener {
             JOptionPane.showMessageDialog(this, "Ticket sent to the printer!");
         } else if (sourceButton.getText().equals("Cancel Flight")) {
             int bookingId = (int) sourceButton.getClientProperty("bookingId");
-            cancelFlight(bookingId);
+            cancelFlight(bookingId, userEmail);
             loadTickets();
         }
     }
@@ -215,21 +215,27 @@ public class checkTickets extends JFrame implements ActionListener {
         }
     }
 
-    private void cancelFlight(int bookingId) {
+    private void cancelFlight(int bookingId, String userEmail) {
+        String flightName;
+        String seatsSelected;
+        double ticketPrice;
+
         try (Connection conn = DBConnector.getConnection()) {
             String getFlightDetailsSQL = """
-        SELECT flight, seats_selected, price
-        FROM tickets
-        WHERE booking_id = ?;
+            SELECT tickets.flight, tickets.seats_selected, tickets.price
+            FROM tickets
+            JOIN users ON tickets.user_id = users.id
+            WHERE tickets.booking_id = ? AND users.email = ?;
         """;
             PreparedStatement getFlightDetailsStmt = conn.prepareStatement(getFlightDetailsSQL);
             getFlightDetailsStmt.setInt(1, bookingId);
+            getFlightDetailsStmt.setString(2, userEmail);
             ResultSet rs = getFlightDetailsStmt.executeQuery();
 
             if (rs.next()) {
-                String flightName = rs.getString("flight");
-                String seatsSelected = rs.getString("seats_selected");
-                double ticketPrice = rs.getDouble("price");
+                flightName = rs.getString("flight");
+                seatsSelected = rs.getString("seats_selected");
+                ticketPrice = rs.getDouble("price");
 
                 String reason;
                 while (true) {
@@ -269,7 +275,7 @@ public class checkTickets extends JFrame implements ActionListener {
                 if (methodChoice == 0) {
                     refundSuccess = openCreditCardRefund();
                 } else {
-                    refundSuccess = openEWalletRefund();
+                    refundSuccess = openEWalletRefundWithProvider();
                 }
 
                 if (!refundSuccess) {
@@ -283,11 +289,11 @@ public class checkTickets extends JFrame implements ActionListener {
                 deleteTicketStmt.executeUpdate();
 
                 String updateBookedSeatsSQL = """
-            UPDATE flights
-            SET booked_seats = TRIM(BOTH ',' FROM REPLACE(
-                CONCAT(',', booked_seats, ','), CONCAT(',', ?, ','), ',')),
-                available_seats = available_seats + ?
-            WHERE flight_name = ?;
+                UPDATE flights
+                SET booked_seats = TRIM(BOTH ',' FROM REPLACE(
+                    CONCAT(',', booked_seats, ','), CONCAT(',', ?, ','), ',')),
+                    available_seats = available_seats + ?
+                WHERE flight_name = ?;
             """;
                 PreparedStatement updateBookedSeatsStmt = conn.prepareStatement(updateBookedSeatsSQL);
                 updateBookedSeatsStmt.setString(1, seatsSelected);
@@ -295,10 +301,21 @@ public class checkTickets extends JFrame implements ActionListener {
                 updateBookedSeatsStmt.setString(3, flightName);
                 updateBookedSeatsStmt.executeUpdate();
 
-                JOptionPane.showMessageDialog(this, "Flight canceled successfully for the following reason:\n" + reason + "\nInconvenience Fee(₱200 per seats)" +
-                        "\nRefund Amount: PHP " + refundAmount);
+                String insertTransactionSQL = """
+                INSERT INTO transaction_history (user_id, transaction_type, flight_name, seats_selected)
+                VALUES ((SELECT id FROM users WHERE email = ?), 'CANCELLED', ?, ?);
+            """;
+                PreparedStatement insertTransactionStmt = conn.prepareStatement(insertTransactionSQL);
+                insertTransactionStmt.setString(1, userEmail);
+                insertTransactionStmt.setString(2, flightName);
+                insertTransactionStmt.setString(3, seatsSelected);
+                insertTransactionStmt.executeUpdate();
+
+                JOptionPane.showMessageDialog(this, "Flight canceled successfully for the following reason:\n" + reason +
+                        "\nInconvenience Fee (₱200 per seat)" +
+                        "\nRefund Amount: ₱" + String.format("%.2f", refundAmount));
             } else {
-                JOptionPane.showMessageDialog(this, "Error: Booking ID not found.");
+                JOptionPane.showMessageDialog(this, "Error: Booking ID not found for the provided email.");
             }
         } catch (SQLException | ClassNotFoundException ex) {
             ex.printStackTrace();
@@ -306,9 +323,31 @@ public class checkTickets extends JFrame implements ActionListener {
         }
     }
 
-    private boolean openEWalletRefund() {
+
+    private boolean openEWalletRefundWithProvider() {
+        String[] eWalletProviders = {"Maya", "GCash"};
+        int providerChoice = JOptionPane.showOptionDialog(
+                this,
+                "Select E-Wallet Provider",
+                "E-Wallet Refund",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                eWalletProviders,
+                eWalletProviders[0]
+        );
+
+        if (providerChoice == JOptionPane.CLOSED_OPTION) {
+            JOptionPane.showMessageDialog(this, "Refund canceled.");
+            return false;
+        }
+
+        String selectedProvider = eWalletProviders[providerChoice];
         while (true) {
-            String ewalletNumber = JOptionPane.showInputDialog(this, "Enter 11-digit E-Wallet Number (starting with 09):");
+            String ewalletNumber = JOptionPane.showInputDialog(
+                    this,
+                    "Enter 11-digit " + selectedProvider + " Number (starting with 09):"
+            );
             if (ewalletNumber == null) {
                 JOptionPane.showMessageDialog(this, "Refund canceled.");
                 return false;
@@ -320,12 +359,12 @@ public class checkTickets extends JFrame implements ActionListener {
             if (ewalletNumber.matches("^09\\d{9}$")) {
                 int confirmation = JOptionPane.showConfirmDialog(
                         this,
-                        "Confirm Refund using E-Wallet number: " + ewalletNumber,
+                        "Confirm Refund using " + selectedProvider + " number: " + ewalletNumber,
                         "Refund Confirmation",
                         JOptionPane.OK_CANCEL_OPTION
                 );
                 if (confirmation == JOptionPane.OK_OPTION) {
-                    JOptionPane.showMessageDialog(this, "Refund successful.");
+                    JOptionPane.showMessageDialog(this, "Refund successful via " + selectedProvider + ".");
                     return true;
                 } else {
                     JOptionPane.showMessageDialog(this, "Refund canceled.");
@@ -336,7 +375,6 @@ public class checkTickets extends JFrame implements ActionListener {
             }
         }
     }
-
     private boolean openCreditCardRefund() {
         while (true) {
             JPanel panel = new JPanel(new GridLayout(4, 2));

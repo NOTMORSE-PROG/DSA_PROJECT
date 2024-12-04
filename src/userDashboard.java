@@ -7,7 +7,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 public class userDashboard extends JFrame implements ActionListener {
-    private final JButton bookFlightButton, checkTicketsButton, profileSettingsButton, logoutButton;
+    private final JButton bookFlightButton, checkTicketsButton, profileSettingsButton, logoutButton, historyButton;
     private final String userEmail;
 
     public userDashboard(String userEmail) {
@@ -51,6 +51,10 @@ public class userDashboard extends JFrame implements ActionListener {
         buttonPanel.add(checkTicketsButton, gbc);
 
         gbc.gridy = 3;
+        historyButton = createButton("History");
+        buttonPanel.add(historyButton, gbc);
+
+        gbc.gridy = 4;
         profileSettingsButton = createButton("Profile Settings");
         buttonPanel.add(profileSettingsButton, gbc);
 
@@ -93,6 +97,9 @@ public class userDashboard extends JFrame implements ActionListener {
         } else if (e.getSource() == checkTicketsButton) {
             this.dispose();
             new checkTickets(userEmail);
+        } else if (e.getSource() == historyButton) {
+            this.dispose();
+            new historyPage(userEmail); // Assuming a `historyPage` class exists
         } else if (e.getSource() == profileSettingsButton) {
             this.dispose();
             new Setting(userEmail);

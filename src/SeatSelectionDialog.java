@@ -100,13 +100,38 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
         if (choice == 0) {
             openCreditCardPayment();
         } else if (choice == 1) {
-            openEWalletPayment();
+            openEWalletProviderSelection();
         }
     }
 
-    private void openEWalletPayment() {
+    private void openEWalletProviderSelection() {
+        String[] eWalletProviders = {"Maya", "GCash"};
+        int providerChoice = JOptionPane.showOptionDialog(
+                this,
+                "Select E-Wallet Provider",
+                "E-Wallet Payment",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                eWalletProviders,
+                eWalletProviders[0]
+        );
+
+        if (providerChoice == JOptionPane.CLOSED_OPTION) {
+            JOptionPane.showMessageDialog(this, "Payment canceled.");
+            return;
+        }
+
+        String selectedProvider = eWalletProviders[providerChoice];
+        processEWalletPayment(selectedProvider);
+    }
+
+    private void processEWalletPayment(String provider) {
         while (true) {
-            String ewalletNumber = JOptionPane.showInputDialog(this, "Enter 11-digit E-Wallet Number (starting with 09):");
+            String ewalletNumber = JOptionPane.showInputDialog(
+                    this,
+                    "Enter 11-digit " + provider + " Number (starting with 09):"
+            );
 
             if (ewalletNumber == null) {
                 JOptionPane.showMessageDialog(this, "Payment canceled.");
@@ -119,6 +144,7 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
             }
 
             if (ewalletNumber.matches("^09\\d{9}$")) {
+                JOptionPane.showMessageDialog(this, "Payment successful via " + provider + ".");
                 processPayment(getUserEmail());
                 break;
             } else {
@@ -126,6 +152,7 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
             }
         }
     }
+
 
     private void processPayment(String userEmail) {
         int randomId = 100000 + new Random().nextInt(900000);
@@ -178,6 +205,16 @@ public class SeatSelectionDialog extends JDialog implements ActionListener {
             statement.setString(8, seatsString);
             statement.setDouble(9, totalPrice);
             statement.executeUpdate();
+
+            String transactionSql = """
+            INSERT INTO transaction_history (user_id, transaction_type, flight_name, seats_selected)
+            VALUES ((SELECT id FROM users WHERE email = ?), 'BOOKED', ?, ?);
+        """;
+            PreparedStatement transactionStatement = connection.prepareStatement(transactionSql);
+            transactionStatement.setString(1, userEmail);
+            transactionStatement.setString(2, selectedFlight.getFlightName());
+            transactionStatement.setString(3, seatsString);
+            transactionStatement.executeUpdate();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
