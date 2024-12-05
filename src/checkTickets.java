@@ -222,10 +222,10 @@ public class checkTickets extends JFrame implements ActionListener {
 
         try (Connection conn = DBConnector.getConnection()) {
             String getFlightDetailsSQL = """
-            SELECT tickets.flight, tickets.seats_selected, tickets.price
-            FROM tickets
-            JOIN users ON tickets.user_id = users.id
-            WHERE tickets.booking_id = ? AND users.email = ?;
+        SELECT tickets.flight, tickets.seats_selected, tickets.price
+        FROM tickets
+        JOIN users ON tickets.user_id = users.id
+        WHERE tickets.booking_id = ? AND users.email = ?;
         """;
             PreparedStatement getFlightDetailsStmt = conn.prepareStatement(getFlightDetailsSQL);
             getFlightDetailsStmt.setInt(1, bookingId);
@@ -237,11 +237,32 @@ public class checkTickets extends JFrame implements ActionListener {
                 seatsSelected = rs.getString("seats_selected");
                 ticketPrice = rs.getDouble("price");
 
+                int numberOfSeats = seatsSelected.split(",").length;
+                double inconvenienceFee = numberOfSeats * 200;
+                double refundAmount = ticketPrice - inconvenienceFee;
+
+                int confirmation = JOptionPane.showConfirmDialog(
+                        this,
+                        "Are you sure you want to cancel this flight?\n" +
+                                "Flight: " + flightName + "\n" +
+                                "Seats: " + seatsSelected + "\n" +
+                                "Inconvenience Fee: ₱" + inconvenienceFee + "\n" +
+                                "Refund Amount: ₱" + String.format("%.2f", refundAmount),
+                        "Confirm Cancellation",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE
+                );
+
+                if (confirmation != JOptionPane.YES_OPTION) {
+                    JOptionPane.showMessageDialog(this, "Flight cancellation aborted.");
+                    return;
+                }
+
                 String reason;
                 while (true) {
                     reason = JOptionPane.showInputDialog(this, "Please provide a reason for canceling the flight:");
                     if (reason == null) {
-                        JOptionPane.showMessageDialog(this, "Flight Cancellation aborted.");
+                        JOptionPane.showMessageDialog(this, "Flight cancellation aborted.");
                         return;
                     }
                     if (reason.trim().isEmpty()) {
@@ -250,9 +271,6 @@ public class checkTickets extends JFrame implements ActionListener {
                         break;
                     }
                 }
-
-                int numberOfSeats = seatsSelected.split(",").length;
-                double refundAmount = ticketPrice - (numberOfSeats * 200);
 
                 String[] refundMethods = {"Credit Card", "E-Wallet"};
                 int methodChoice = JOptionPane.showOptionDialog(
@@ -267,7 +285,7 @@ public class checkTickets extends JFrame implements ActionListener {
                 );
 
                 if (methodChoice == JOptionPane.CLOSED_OPTION) {
-                    JOptionPane.showMessageDialog(this, "Flight Cancellation aborted.");
+                    JOptionPane.showMessageDialog(this, "Flight cancellation aborted.");
                     return;
                 }
 
@@ -279,7 +297,7 @@ public class checkTickets extends JFrame implements ActionListener {
                 }
 
                 if (!refundSuccess) {
-                    JOptionPane.showMessageDialog(this, "Flight Cancellation aborted.");
+                    JOptionPane.showMessageDialog(this, "Flight cancellation aborted.");
                     return;
                 }
 
@@ -289,11 +307,11 @@ public class checkTickets extends JFrame implements ActionListener {
                 deleteTicketStmt.executeUpdate();
 
                 String updateBookedSeatsSQL = """
-                UPDATE flights
-                SET booked_seats = TRIM(BOTH ',' FROM REPLACE(
-                    CONCAT(',', booked_seats, ','), CONCAT(',', ?, ','), ',')),
-                    available_seats = available_seats + ?
-                WHERE flight_name = ?;
+            UPDATE flights
+            SET booked_seats = TRIM(BOTH ',' FROM REPLACE(
+                CONCAT(',', booked_seats, ','), CONCAT(',', ?, ','), ',')),
+                available_seats = available_seats + ?
+            WHERE flight_name = ?;
             """;
                 PreparedStatement updateBookedSeatsStmt = conn.prepareStatement(updateBookedSeatsSQL);
                 updateBookedSeatsStmt.setString(1, seatsSelected);
@@ -302,8 +320,8 @@ public class checkTickets extends JFrame implements ActionListener {
                 updateBookedSeatsStmt.executeUpdate();
 
                 String insertTransactionSQL = """
-                INSERT INTO transaction_history (user_id, transaction_type, flight_name, seats_selected)
-                VALUES ((SELECT id FROM users WHERE email = ?), 'CANCELLED', ?, ?);
+            INSERT INTO transaction_history (user_id, transaction_type, flight_name, seats_selected)
+            VALUES ((SELECT id FROM users WHERE email = ?), 'CANCELLED', ?, ?);
             """;
                 PreparedStatement insertTransactionStmt = conn.prepareStatement(insertTransactionSQL);
                 insertTransactionStmt.setString(1, userEmail);
@@ -322,6 +340,7 @@ public class checkTickets extends JFrame implements ActionListener {
             JOptionPane.showMessageDialog(this, "Error canceling flight: " + ex.getMessage());
         }
     }
+
 
 
     private boolean openEWalletRefundWithProvider() {

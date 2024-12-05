@@ -51,7 +51,7 @@ public class bookFlight extends JFrame implements ActionListener {
         String[] airlines = {"Philippine Airlines", "Cebu Pacific", "AirAsia", "PAL Express"};
         Random rand = new Random();
 
-        LocalDate today = LocalDate.of(2024, 12, 4);
+        LocalDate today = LocalDate.of(2024, 12, 6);
         LocalDate nextWeekStart = today.plusWeeks(1);
         LocalDate nextMonthStart = LocalDate.of(2025, 1, 1);
 
