@@ -3,10 +3,13 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.sql.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Setting extends JFrame implements ActionListener {
-    private final String userEmail;
+    private String userEmail;
     private final JPasswordField newPasswordField, confirmPasswordField;
+    private final JTextField emailField;
     private final JButton updateAccountButton, deleteAccountButton, goBackButton;
 
     public Setting(String userEmail) {
@@ -65,11 +68,10 @@ public class Setting extends JFrame implements ActionListener {
         gbc.gridy = 1;
         mainPanel.add(emailLabel, gbc);
 
-        JLabel emailValue = new JLabel(userEmail);
-        emailValue.setFont(new Font("Arial", Font.PLAIN, 28));
-        emailValue.setForeground(Color.WHITE);
+        emailField = new JTextField(userEmail);
+        emailField.setFont(new Font("Arial", Font.PLAIN, 28));
         gbc.gridx = 1;
-        mainPanel.add(emailValue, gbc);
+        mainPanel.add(emailField, gbc);
 
         JLabel newPasswordLabel = new JLabel("New Password:");
         newPasswordLabel.setFont(new Font("Arial", Font.BOLD, 28));
@@ -129,36 +131,76 @@ public class Setting extends JFrame implements ActionListener {
         if (e.getSource() == updateAccountButton) {
             String newPassword = new String(newPasswordField.getPassword());
             String confirmPassword = new String(confirmPasswordField.getPassword());
-
-            int minPasswordLength = 8;
-            int maxPasswordLength = 16;
-
-            if (newPassword.isEmpty() || confirmPassword.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Please fill in both password fields.");
+            String newEmail = emailField.getText().trim();
+            if (newEmail.equals(userEmail) && newPassword.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No changes to update.");
                 return;
             }
+            if (!newEmail.equals(userEmail)) {
+                if (newEmail.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Email cannot be empty.");
+                    return;
+                }
 
-            if (newPassword.length() < minPasswordLength || newPassword.length() > maxPasswordLength) {
-                JOptionPane.showMessageDialog(this, "Password must be between " + minPasswordLength + " and " + maxPasswordLength + " characters.");
-                return;
+                Pattern emailPattern = Pattern.compile("^[a-zA-Z0-9._%+-]+@gmail\\.com$");
+                Matcher matcher = emailPattern.matcher(newEmail);
+                if (!matcher.matches()) {
+                    JOptionPane.showMessageDialog(this, "Please enter a valid Gmail address (e.g., username@gmail.com).");
+                    return;
+                }
+                try (Connection conn = DBConnector.getConnection()) {
+                    String checkEmailSQL = "SELECT COUNT(*) FROM users WHERE email = ?";
+                    PreparedStatement checkEmailStmt = conn.prepareStatement(checkEmailSQL);
+                    checkEmailStmt.setString(1, newEmail);
+                    ResultSet rs = checkEmailStmt.executeQuery();
+
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        JOptionPane.showMessageDialog(this, "There is already a user associated with this email.");
+                        return;
+                    }
+                } catch (SQLException | ClassNotFoundException ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(this, "Error checking email availability: " + ex.getMessage());
+                    return;
+                }
             }
+            if (!newPassword.isEmpty()) {
+                int minPasswordLength = 8;
+                int maxPasswordLength = 16;
 
-            if (!newPassword.equals(confirmPassword)) {
-                JOptionPane.showMessageDialog(this, "Passwords do not match.");
-                return;
+                if (newPassword.length() < minPasswordLength || newPassword.length() > maxPasswordLength) {
+                    JOptionPane.showMessageDialog(this, "Password must be between " + minPasswordLength + " and " + maxPasswordLength + " characters.");
+                    return;
+                }
+
+                if (!newPassword.equals(confirmPassword)) {
+                    JOptionPane.showMessageDialog(this, "Passwords do not match.");
+                    return;
+                }
             }
-
             try (Connection conn = DBConnector.getConnection()) {
-                String updateSQL = "UPDATE users SET password = ? WHERE email = ?";
+                String updateSQL;
+                if (newPassword.isEmpty()) {
+                    updateSQL = "UPDATE users SET email = ? WHERE email = ?";
+                } else {
+                    updateSQL = "UPDATE users SET email = ?, password = ? WHERE email = ?";
+                }
 
                 PreparedStatement pstmt = conn.prepareStatement(updateSQL);
-                pstmt.setString(1, newPassword);
-                pstmt.setString(2, userEmail);
+                pstmt.setString(1, newEmail);
+
+                if (!newPassword.isEmpty()) {
+                    pstmt.setString(2, newPassword);
+                    pstmt.setString(3, userEmail);
+                } else {
+                    pstmt.setString(2, userEmail);
+                }
 
                 pstmt.executeUpdate();
 
                 JOptionPane.showMessageDialog(this, "Account updated successfully.");
-
+                userEmail = newEmail;
+                emailField.setText(userEmail);
                 newPasswordField.setText("");
                 confirmPasswordField.setText("");
             } catch (SQLException | ClassNotFoundException ex) {
@@ -179,7 +221,6 @@ public class Setting extends JFrame implements ActionListener {
                         pstmt.setString(1, userEmail);
                         pstmt.executeUpdate();
                     }
-
                     JOptionPane.showMessageDialog(this, "Account deleted successfully.");
                     this.dispose();
                     new indexFrame();

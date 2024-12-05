@@ -62,11 +62,11 @@ public class historyPage extends JFrame implements ActionListener {
             }
 
             String sql = """
-                    SELECT id, transaction_type, flight_name, seats_selected, transaction_date
-                    FROM transaction_history
-                    WHERE user_id = ?
-                    ORDER BY transaction_date DESC;
-                    """;
+                SELECT id, transaction_type, flight_name, seats_selected, transaction_date
+                FROM transaction_history
+                WHERE user_id = ?
+                ORDER BY transaction_date DESC;
+                """;
 
             PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, userId);
@@ -80,16 +80,18 @@ public class historyPage extends JFrame implements ActionListener {
                 String seatsSelected = rs.getString("seats_selected");
                 String transactionDate = rs.getString("transaction_date");
 
+                StringBuilder formattedSeats = getFormattedSeats(seatsSelected);
+
                 String historyText = String.format(
-                        "Transaction Type: %s\nFlight: %s\nSeats: %s\nDate: %s",
-                        transactionType, flightName, seatsSelected, transactionDate
+                        "Transaction Type: %s<br>Flight: %s<br>Seats: %s<br>Date: %s",
+                        transactionType, flightName, formattedSeats, transactionDate
                 );
 
                 gbc.gridx = 0;
                 gbc.gridy = row * 2;
                 gbc.gridwidth = 2;
 
-                JLabel historyLabel = new JLabel("<html>" + historyText.replace("\n", "<br>") + "</html>");
+                JLabel historyLabel = new JLabel("<html>" + historyText + "</html>");
                 historyLabel.setFont(new Font("Arial", Font.PLAIN, 32));
                 historyLabel.setForeground(Color.WHITE);
                 historyPanel.add(historyLabel, gbc);
@@ -127,6 +129,23 @@ public class historyPage extends JFrame implements ActionListener {
         revalidate();
         repaint();
     }
+
+    private static StringBuilder getFormattedSeats(String seats) {
+        String[] seatArray = seats.split(",");
+        StringBuilder formattedSeats = new StringBuilder();
+
+        for (int i = 0; i < seatArray.length; i++) {
+            formattedSeats.append(seatArray[i].trim());
+            if ((i + 1) % 5 == 0 && i != seatArray.length - 1) {
+                formattedSeats.append("<br>");
+            } else {
+                formattedSeats.append(", ");
+            }
+        }
+
+        return formattedSeats;
+    }
+
 
     private int getUserId(Connection conn) throws SQLException {
         String sql = "SELECT id FROM users WHERE email = ?";

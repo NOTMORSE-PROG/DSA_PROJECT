@@ -8,6 +8,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
@@ -52,7 +54,7 @@ public class bookFlight extends JFrame implements ActionListener {
         Random rand = new Random();
 
         LocalDate today = LocalDate.of(2024, 12, 6);
-        LocalDate nextWeekStart = today.plusWeeks(1);
+        LocalDate endOfWeek = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
         LocalDate nextMonthStart = LocalDate.of(2025, 1, 1);
 
         for (int i = 0; i < 50; i++) {
@@ -64,14 +66,24 @@ public class bookFlight extends JFrame implements ActionListener {
 
             LocalDateTime departureTime;
             if (i < 15) {
-                departureTime = today.atStartOfDay().plusHours(rand.nextInt(24));
+                LocalDate randomDate = today.plusDays(rand.nextInt((int) ChronoUnit.DAYS.between(today, endOfWeek) + 1));
+                departureTime = randomDate.atStartOfDay().plusHours(rand.nextInt(24)).plusMinutes(rand.nextInt(60));
             } else if (i < 35) {
-                departureTime = nextWeekStart.atStartOfDay().plusDays(rand.nextInt(7)).plusHours(rand.nextInt(24));
+                int randomWeekOffset = rand.nextInt(4) + 1;
+                LocalDate randomWeekStart = today.plusWeeks(randomWeekOffset).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                LocalDate randomDate = randomWeekStart.plusDays(rand.nextInt(7));
+                departureTime = randomDate.atStartOfDay().plusHours(rand.nextInt(24)).plusMinutes(rand.nextInt(60));
             } else {
-                departureTime = nextMonthStart.atStartOfDay().plusDays(rand.nextInt(31)).plusHours(rand.nextInt(24));
+                LocalDate randomDate = nextMonthStart.plusDays(rand.nextInt(nextMonthStart.lengthOfMonth()));
+                departureTime = randomDate.atStartOfDay().plusHours(rand.nextInt(24)).plusMinutes(rand.nextInt(60));
             }
 
-            LocalDateTime arrivalTime = departureTime.plusHours(rand.nextInt(6) + 10);
+            LocalDateTime arrivalTime = departureTime.plusHours(rand.nextInt(6) + 1);
+
+            String cabinType = rand.nextBoolean() ? "Economy" : "Business";
+            double price = cabinType.equals("Economy")
+                    ? rand.nextDouble(1000, 3000)
+                    : rand.nextDouble(3000, 5000);
 
             Flight flight = new Flight(
                     airlines[rand.nextInt(airlines.length)] + " " + rand.nextInt(1000),
@@ -79,15 +91,14 @@ public class bookFlight extends JFrame implements ActionListener {
                     destination,
                     departureTime,
                     arrivalTime,
-                    rand.nextDouble(1000, 5000),
-                    rand.nextBoolean() ? "Economy" : "Business",
+                    price,
+                    cabinType,
                     60
             );
             generatedFlights.add(flight);
         }
         return generatedFlights;
     }
-
 
     private void createUI() {
         setLayout(new BorderLayout());
@@ -281,28 +292,26 @@ public class bookFlight extends JFrame implements ActionListener {
         int category = random.nextInt(3);
 
         if (category == 0) {
-            departureTime = LocalDateTime.now()
-                    .withHour(random.nextInt(24))
-                    .withMinute(random.nextInt(60));
+            departureTime = LocalDateTime.of(2024, 12, random.nextInt(3) + 6, random.nextInt(24), random.nextInt(60));
         } else if (category == 1) {
-            departureTime = LocalDateTime.now()
-                    .plusDays(7 + random.nextInt(7))
-                    .withHour(random.nextInt(24))
-                    .withMinute(random.nextInt(60));
+            departureTime = LocalDateTime.of(2024, 12, random.nextInt(23) + 9, random.nextInt(24), random.nextInt(60));
         } else {
             departureTime = LocalDateTime.of(2025, 1, random.nextInt(31) + 1, random.nextInt(24), random.nextInt(60));
         }
 
-        LocalDateTime arrivalTime = departureTime.plusHours(random.nextInt(6) + 10);
+        LocalDateTime arrivalTime = departureTime.plusHours(random.nextInt(6) + 1);
 
-        double price = 1000 + random.nextDouble() * 10000;
         String cabin = cabinTypes[random.nextInt(cabinTypes.length)];
+        double price = cabin.equals("Economy")
+                ? random.nextDouble(1000, 3000)
+                : random.nextDouble(3000, 10000);
+
         int totalSeats = 60;
 
         String insertSQL = """
-        INSERT INTO flights (flight_name, origin, destination, departure_time, arrival_time,\s
-                             price, cabin, total_seats, available_seats, booked_seats)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    INSERT INTO flights (flight_name, origin, destination, departure_time, arrival_time,
+                         price, cabin, total_seats, available_seats, booked_seats)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     """;
 
         try (Connection conn = DBConnector.getConnection();
@@ -325,6 +334,7 @@ public class bookFlight extends JFrame implements ActionListener {
         }
     }
 
+
     private void applyFilters() {
         List<Flight> filteredFlights = new ArrayList<>(flights);
         String searchText = searchField.getText().trim().toLowerCase();
@@ -334,14 +344,15 @@ public class bookFlight extends JFrame implements ActionListener {
 
         String selectedDate = (String) dateFilterCombo.getSelectedItem();
         if (!"Any Date".equals(selectedDate)) {
-            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime now = LocalDateTime.of(2024, 12, 6, 0, 0); // Fixed to December 6, 2024, for consistency
             filteredFlights.removeIf(flight -> {
                 LocalDateTime departure = flight.getDepartureTime();
                 if ("Today".equals(selectedDate)) {
-                    return !departure.toLocalDate().isEqual(now.toLocalDate());
+                    LocalDate endOfWeek = now.toLocalDate().with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
+                    return departure.toLocalDate().isBefore(now.toLocalDate()) || departure.toLocalDate().isAfter(endOfWeek);
                 } else if ("Next Week".equals(selectedDate)) {
-                    LocalDate nextWeekStart = now.toLocalDate().plusWeeks(1);
-                    LocalDate nextWeekEnd = nextWeekStart.plusDays(6);
+                    LocalDate nextWeekStart = LocalDate.of(2024, 12, 9);
+                    LocalDate nextWeekEnd = LocalDate.of(2024, 12, 31);
                     return departure.toLocalDate().isBefore(nextWeekStart) || departure.toLocalDate().isAfter(nextWeekEnd);
                 } else if ("Next Month".equals(selectedDate)) {
                     LocalDate nextMonthStart = now.toLocalDate().withDayOfMonth(1).plusMonths(1);
@@ -350,7 +361,11 @@ public class bookFlight extends JFrame implements ActionListener {
                 }
                 return false;
             });
+
+            filteredFlights.sort(Comparator.comparing(Flight::getDepartureTime));
         }
+
+
 
         String selectedPrice = (String) priceFilterCombo.getSelectedItem();
         if ("Low to High".equals(selectedPrice)) {

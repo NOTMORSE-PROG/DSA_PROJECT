@@ -60,10 +60,10 @@ public class checkTickets extends JFrame implements ActionListener {
 
         try (Connection conn = DBConnector.getConnection()) {
             String sql = """
-                SELECT user_fullname, booking_id, flight, origin, destination, departure, seats_selected, price
-                FROM tickets
-                WHERE user_id = (SELECT id FROM users WHERE email = ?);
-            """;
+        SELECT user_fullname, booking_id, flight, origin, destination, departure, seats_selected, price
+        FROM tickets
+        WHERE user_id = (SELECT id FROM users WHERE email = ?);
+        """;
 
             PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, userEmail);
@@ -124,14 +124,24 @@ public class checkTickets extends JFrame implements ActionListener {
                 gbc.gridx = 1;
                 ticketPanel.add(printButton, gbc);
 
-                JButton removeButton = new JButton("Cancel Flight");
+                JButton cancelFlight = new JButton("Cancel Flight");
+                cancelFlight.setFont(new Font("Arial", Font.BOLD, 28));
+                cancelFlight.setForeground(Color.WHITE);
+                cancelFlight.setBackground(Color.decode("#e74c3c"));
+                cancelFlight.setFocusPainted(false);
+                cancelFlight.putClientProperty("bookingId", bookingId);
+                cancelFlight.addActionListener(this);
+                gbc.gridx = 2;
+                ticketPanel.add(cancelFlight, gbc);
+
+                JButton removeButton = new JButton("Remove Ticket");
                 removeButton.setFont(new Font("Arial", Font.BOLD, 28));
                 removeButton.setForeground(Color.WHITE);
                 removeButton.setBackground(Color.decode("#e74c3c"));
                 removeButton.setFocusPainted(false);
                 removeButton.putClientProperty("bookingId", bookingId);
                 removeButton.addActionListener(this);
-                gbc.gridx = 2;
+                gbc.gridx = 3;
                 ticketPanel.add(removeButton, gbc);
 
                 row++;
@@ -149,20 +159,19 @@ public class checkTickets extends JFrame implements ActionListener {
     private static StringBuilder getStringBuilder(String seats) {
         String[] seatArray = seats.split(",");
         StringBuilder formattedSeats = new StringBuilder();
-        if (seatArray.length >= 5) {
-            for (int i = 0; i < seatArray.length; i++) {
-                formattedSeats.append(seatArray[i]);
-                if ((i + 1) % 5 == 0) {
-                    formattedSeats.append("<br>");
-                } else {
-                    formattedSeats.append(", ");
-                }
+
+        for (int i = 0; i < seatArray.length; i++) {
+            formattedSeats.append(seatArray[i].trim());
+            if ((i + 1) % 5 == 0 && i != seatArray.length - 1) {
+                formattedSeats.append("<br>");
+            } else {
+                formattedSeats.append(", ");
             }
-        } else {
-            formattedSeats.append(seats);
         }
+
         return formattedSeats;
     }
+
 
     @Override
     public void actionPerformed(ActionEvent e) {
@@ -179,6 +188,10 @@ public class checkTickets extends JFrame implements ActionListener {
         } else if (sourceButton.getText().equals("Cancel Flight")) {
             int bookingId = (int) sourceButton.getClientProperty("bookingId");
             cancelFlight(bookingId, userEmail);
+            loadTickets();
+        }else if (sourceButton.getText().equals("Remove Ticket")) {
+            int bookingId = (int) sourceButton.getClientProperty("bookingId");
+            removeTicket(bookingId);
             loadTickets();
         }
     }
@@ -214,6 +227,37 @@ public class checkTickets extends JFrame implements ActionListener {
             }
         }
     }
+
+    private void removeTicket(int bookingId) {
+        int confirmation = JOptionPane.showConfirmDialog(
+                this,
+                "Are you sure you want to remove this ticket? This action cannot be undone.",
+                "Confirm Remove Ticket",
+                JOptionPane.YES_NO_OPTION
+        );
+
+        if (confirmation == JOptionPane.YES_OPTION) {
+            try (Connection conn = DBConnector.getConnection()) {
+                String deleteSQL = "DELETE FROM tickets WHERE booking_id = ?";
+                PreparedStatement pstmt = conn.prepareStatement(deleteSQL);
+                pstmt.setInt(1, bookingId);
+                int rowsAffected = pstmt.executeUpdate();
+
+                if (rowsAffected > 0) {
+                    JOptionPane.showMessageDialog(this, "Ticket successfully removed.");
+                } else {
+                    JOptionPane.showMessageDialog(this, "Error: Ticket not found.");
+                }
+            } catch (SQLException | ClassNotFoundException e) {
+                e.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error removing ticket: " + e.getMessage());
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, "Ticket removal canceled.");
+        }
+    }
+
+
 
     private void cancelFlight(int bookingId, String userEmail) {
         String flightName;
